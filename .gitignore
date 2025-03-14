@@ -1,0 +1,7 @@
+.*
+!.gitignore
+baseline
+dataset/veri_images
+logs/Veri776/*
+!logs/Veri776/.gitignore
+__*__
