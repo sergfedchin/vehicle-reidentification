@@ -46,14 +46,13 @@ class MHA(nn.Module):
         self.value = nn.Linear(n_dims, n_dims)
 
         self.mha = torch.nn.MultiheadAttention(n_dims, heads)
-        print('debug')
+        # print('debug')
 
     def forward(self, x):
         q = self.query(x)
         k = self.key(x)
         v = self.value(x)
         out = self.mha(q,k,v)
-
         return out
 
 

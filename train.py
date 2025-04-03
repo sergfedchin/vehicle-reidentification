@@ -36,23 +36,23 @@ def set_module_param_attributes(module: nn.Module, attribute: str, value):
 
 def get_device(data) -> torch.device:
     # Force a GPU
-    if not data['parallel']:  
-        if data['gpu']:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(data['gpu'])
+    # if not data['parallel']:  
+        # if data['gpu']:
+        #     os.environ["CUDA_VISIBLE_DEVICES"] = str(data['gpu'])
     # Check if the GPU is available and select
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     print(f'Selected device: {device}')
-    if device == torch.device('cuda'):
+    if torch.cuda.is_available():
         print('-' * 20, 'GPU info', '-' * 20)
-        if torch.cuda.is_available():
-            num_gpus = torch.cuda.device_count()
-            print(f"{num_gpus} GPU Available.")
-            for i in range(num_gpus):
-                gpu_info = torch.cuda.get_device_properties(i)
-                print(f"GPU {i}: {gpu_info.name}")
-                print(f"  Total Memory:          {gpu_info.total_memory / 1024**2} MB")
-                print(f"  Multi Processor Count: {gpu_info.multi_processor_count}")
-                print(f"  Compute Capability:    {gpu_info.major}.{gpu_info.minor}")
+        # num_gpus = torch.cuda.device_count()
+        num_gpus = 1
+        print(f"{num_gpus} GPU Available.")
+        for i in range(num_gpus):
+            gpu_info = torch.cuda.get_device_properties(i)
+            print(f"GPU {i}: {gpu_info.name}")
+            print(f"  Total Memory:          {gpu_info.total_memory / 1024**2} MB")
+            print(f"  Multi Processor Count: {gpu_info.multi_processor_count}")
+            print(f"  Compute Capability:    {gpu_info.major}.{gpu_info.minor}")
         torch.cuda.empty_cache()
     return device
 
@@ -122,7 +122,8 @@ if __name__ == "__main__":
     model = get_model(data, device)
 
     if data['parallel']:
-        model = torch.nn.DataParallel(model, device_ids=torch.arange(torch.cuda.device_count()))
+        # model = torch.nn.DataParallel(model, device_ids=torch.arange(torch.cuda.device_count()))
+        model = torch.nn.DataParallel(model, device_ids=torch.arange(1))
         print("\nParallel activated!\nDo not use this with LBS!\nIt may result in weird behaviour sometimes.")
 
     # Losses
