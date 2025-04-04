@@ -38,7 +38,7 @@ gn_init: kaiming
 pretrain_ongroups: True
 
 # Data
-BATCH_SIZE: 48 #48
+BATCH_SIZE: 256 #48
 NUM_INSTANCES: 8 #8
 num_workers_train: 8 #8
 num_workers_test: 16

@@ -118,7 +118,6 @@ def train_epoch(model, device, dataloader, loss_fn, triplet_loss_fn, optimizer, 
     loss_log = tqdm(total=0, position=1, bar_format='{desc}', leave=True)
     loss_ce_log = tqdm(total=0, position=2, bar_format='{desc}', leave=True)
     loss_triplet_log = tqdm(total=0, position=3, bar_format='{desc}', leave=True)
-    tqdm
     n_images = 0
     acc_v = 0
     stepcount = 0
