@@ -115,7 +115,8 @@ if __name__ == "__main__":
                                 num_workers=data['num_workers_train'],
                                 batch_size = data['BATCH_SIZE'],
                                 collate_fn=train_collate_fn,
-                                pin_memory=True)
+                                pin_memory=True,
+                                prefetch_factor=4)
  
     # Create Model
     device = get_device(data)
