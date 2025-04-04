@@ -55,17 +55,17 @@ p_rerase: 0.5
 dataset: Veri776
 n_classes: 576  # 776?
 
-ROOT_DIR: /home/fedchn/object-reidentification/dataset/veri_images
-train_dir: /home/fedchn/object-reidentification/dataset/veri_images
-query_dir: /home/fedchn/object-reidentification/dataset/veri_images
-test_dir: /home/fedchn/object-reidentification/dataset/veri_images
-train_list_file: /home/fedchn/object-reidentification/dataset/VeRi/original_veri_train_list.txt
-query_list_file: /home/fedchn/object-reidentification/dataset/VeRi/original_veri_query_list.txt
-gallery_list_file: /home/fedchn/object-reidentification/dataset/VeRi/original_veri_test_list.txt
+ROOT_DIR: /home/fedchin/object-reidentification/dataset/veri_images
+train_dir: /home/fedchin/object-reidentification/dataset/veri_images
+query_dir: /home/fedchin/object-reidentification/dataset/veri_images
+test_dir: /home/fedchin/object-reidentification/dataset/veri_images
+train_list_file: /home/fedchin/object-reidentification/dataset/VeRi/original_veri_train_list.txt
+query_list_file: /home/fedchin/object-reidentification/dataset/VeRi/original_veri_query_list.txt
+gallery_list_file: /home/fedchin/object-reidentification/dataset/VeRi/original_veri_test_list.txt
 
-viewpoints: /home/fedchn/object-reidentification/dataset/VeRi/viewpoints.txt
-test_keypoint: /home/fedchn/object-reidentification/dataset/VeRi/keypoint_orient_test.txt  # obsolete
-train_keypoint: /home/fedchn/object-reidentification/dataset/VeRi/keypoint_orient_train.txt  # obsolete
+viewpoints: /home/fedchin/object-reidentification/dataset/VeRi/viewpoints.txt
+test_keypoint: /home/fedchin/object-reidentification/dataset/VeRi/keypoint_orient_test.txt  # obsolete
+train_keypoint: /home/fedchin/object-reidentification/dataset/VeRi/keypoint_orient_train.txt  # obsolete
 
 # Optimizer settings
 optimizer: Adam #Adam SGD
