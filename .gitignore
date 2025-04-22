@@ -1,0 +1,8 @@
+.*
+!.gitignore
+__*__
+dataset/veri_images/
+logs/
+vis_results/
+log_batches_no_preload.txt
+*.pyc

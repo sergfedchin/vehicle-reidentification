@@ -1,0 +1,99 @@
+model_arch: MBR_4G
+LAI: False
+n_cams: 20
+n_views: 8
+backbone: ibn # dinov2_vit(s/b/l/g)14 dinov2_vit(s/b/l/g)14_reg
+torch_seed: 0
+epoch_freeze_L1toL3: 10  # 10 !!!!!!!!!!!!!!!!! CHANGE TO 10
+freeze_triplet_branches: 0
+freeze_backbone_warmup: False  # for circle
+branch_layer: 3
+validation_period: 10
+
+# GPU Settings
+half_precision: True
+parallel: False
+gpu: 0
+
+# Data
+BATCH_SIZE: 48 # 128 #48
+num_workers_train: 2 #8
+num_workers_test: 2
+
+preload_train_device: cuda  # cuda or cpu
+preload_train_rate: 0
+preload_test_device: cuda  # cuda or cpu
+preload_test_rate: 0
+preload_num_workers: 2
+preload_batch_size: 128
+
+y_length: 256
+x_length: 256
+
+# Losses
+mean_losses: False
+
+softmax_loss: torch_ce
+label_smoothing: 0.1
+
+metric_loss: fastreidtriplet #Batch_hard_triplet #Batch_hard_triplet #SupCon #RLL
+metric_loss_trans: fastreidtriplet
+hard_mining: True
+triplet_norm: False
+triplet_margin: 0.1 # None for Soft Margin Triplet Loss with Batch Hard
+triplet_margin_trans: 0.1
+
+circle_softmax: False
+margin_circle: 0.35
+scale_circle: 64
+
+group_norm: False
+pretrain_gropnorm: False
+gn_init: kaiming
+pretrain_ongroups: True
+
+n_mean: [0.5, 0.5, 0.5]
+n_std: [0.5, 0.5, 0.5]
+
+p_hflip: 0.5
+p_rerase: 0.5
+
+dataset: Veri776
+
+n_classes: 576
+NUM_INSTANCES: 8 #8
+images_dir: /home/fedchin/vehicle_reid_itsc2023/dataset/veri_images
+query_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_query_list.txt
+gallery_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_test_list.txt
+train_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_train_list.txt
+
+test_keypoints: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/keypoint_orient_test.txt
+train_keypoints: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/keypoint_orient_train.txt
+
+# Define an optimizer settings
+optimizer: Adam # Adam SGD
+lr: 0.0001 # 3.5e-5 original Adam 0.0001
+weight_decay: 0.0005
+bias_lr_factor: 1
+momentum: 0.9
+
+# scheduler settings
+sched_name: Warm_MultiStep
+min_lr: 7.75e-5
+num_epochs: 130
+milestones: [40, 70, 100]
+gamma: 0.1
+warmup_factor: 0.0
+warmup_iters:  10  # 10 !!!!!!!!!!!!!!!!! CHANGE TO 10
+warmup_method: linear
+
+alpha_ce: 0.6 #aka alpha
+beta_tri: 1.0  #aka beta
+gamma_ce: 0.4
+gamma_t: 0.4
+
+# Experiment 
+pool: GAP
+pool_tripletb: GAP
+pool_trans: GAP
+linear_num: False
