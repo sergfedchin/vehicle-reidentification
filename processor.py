@@ -132,7 +132,9 @@ def train_epoch(model, device, dataloader, loss_fn, triplet_loss, optimizer, dat
         optimizer.zero_grad()
         batch_images = batch_images.to(device=device, non_blocking=True)
         batch_labels = batch_labels.to(device=device, non_blocking=True)
-        torch.save(batch_indices.type(torch.int32), f'batch_logs/epoch_{epoch:03d}/batch_{batch_id:05d}_worker_{torch.unique(batch_workers).item()}.pt')
+        with open('log.txt', 'a') as f:
+            print(f'{batch_id}:', batch_indices, file=f)
+        # torch.save(batch_indices.type(torch.int32), f'batch_logs/epoch_{epoch:03d}/batch_{batch_id:05d}_worker_{torch.unique(batch_workers).item()}.pt')
         # with open('log_batches_no_preload.txt', 'a') as f:
         #     f.write(f'Worker {torch.unique(batch_workers).item()}:\n{'\n'.join(map(str, batch_indices.tolist()))}')
         if scaler:

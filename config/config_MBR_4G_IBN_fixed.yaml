@@ -21,15 +21,15 @@ num_workers_train: 2 #8
 num_workers_test: 2
 
 preload_train_device: cuda  # cuda or cpu
-preload_train_rate: 0
-preload_test_device: cuda  # cuda or cpu
-preload_test_rate: 0
+preload_train_rate: 1
+preload_test_device: cpu  # cuda or cpu
+preload_test_rate: 1
 preload_num_workers: 2
 preload_batch_size: 128
 
-num_epochs: 130
-sampler: random_identity # fixed_order or random_identity
-# sampler_batches: /home/fedchin/vehicle_reid_itsc2023/saved_epochs_batches.pt
+num_epochs: 80
+sampler: fixed_order # fixed_order or random_identity
+sampler_batches: /home/fedchin/vehicle_reid_itsc2023/saved_epochs_batches.pt
 
 y_length: 256
 x_length: 256

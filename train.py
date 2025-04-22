@@ -191,8 +191,16 @@ if __name__ == "__main__":
                                         preload_num_workers=data['preload_num_workers'],
                                         preload_batch_size=data['preload_batch_size'],
                                         )
+        if 'fixed' in data['sampler'].lower():
+            sampler = FixedOrderSampler(saved_batches_path=data['sampler_batches'],
+                                        num_epochs=data['num_epochs'],
+                                        batches_per_epoch=751,
+                                        batch_size=data['BATCH_SIZE']
+                                        )
+        else:
+            sampler = RandomIdentitySampler(data_train, data['BATCH_SIZE'], data['NUM_INSTANCES'])
         data_train = DataLoader(data_train,
-                                sampler=RandomIdentitySampler(data_train, data['BATCH_SIZE'], data['NUM_INSTANCES']),
+                                sampler=sampler,
                                 num_workers=data['num_workers_train'],
                                 batch_size=data['BATCH_SIZE'],
                                 collate_fn=train_collate_fn,
@@ -290,6 +298,7 @@ if __name__ == "__main__":
         time_since_start = time.time() - script_start_time
         print(f'\nTime since script start: {format_time(time_since_start)}')
 
+        sampler.set_epoch(epoch)
         start_time = time.time()
         train_loss, ce_loss, triplet_loss, alpha_ce, beta_tri = train_epoch(model, device, data_train, ce_loss_fn, metric_loss_fn, optimizer, data, alpha_ce, beta_tri, logger, epoch, scheduler, scaler)
         epoch_time = time.time() - start_time

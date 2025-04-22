@@ -88,6 +88,47 @@ class RandomIdentitySampler(Sampler):
     def __len__(self):
         return self.length  
 
+
+class FixedOrderSampler(Sampler):
+    def __init__(self, saved_batches_path, num_epochs=80, batches_per_epoch=751, batch_size=48):
+        """
+        Args:
+            saved_batches_path (str): Path to .pt file with shape [epochs, batches_per_epoch, batch_size]
+            num_epochs (int): Total epochs in saved file
+            batches_per_epoch (int): Batches per epoch in saved file
+        """
+        # Load the pre-saved batch indices
+        self.saved_batches: torch.Tensor = torch.load(saved_batches_path)  # shape [80, 751, 48]
+        
+        # Validate shape
+        assert self.saved_batches.shape[0] >= num_epochs
+        assert self.saved_batches.shape[1] == batches_per_epoch
+        assert self.saved_batches.shape[2] == batch_size, f"Expected shape [>={num_epochs}, {batches_per_epoch}, {batch_size}], got {self.saved_batches.shape}"
+        
+        self.num_epochs = num_epochs
+        self.batches_per_epoch = batches_per_epoch
+        self.batch_size = batch_size
+        self.current_epoch = 0
+        
+    def set_epoch(self, epoch):
+        """Sets the current epoch to select correct pre-saved batches"""
+        self.current_epoch = epoch
+        
+    def __iter__(self):
+        """Yields indices in exact order from saved batches for current epoch"""
+        epoch_batches = self.saved_batches[self.current_epoch]  # shape [751, 48]
+        
+        # Flatten all batches into single sequence for this epoch
+        indices = epoch_batches.flatten()  # shape [751*48]
+        
+        # Yield indices one by one (DataLoader will regroup into batches)
+        yield from indices.tolist()
+        
+    def __len__(self):
+        """Total samples per epoch (batches_per_epoch * batch_size)"""
+        return self.batches_per_epoch * self.batch_size
+
+
 mp.set_start_method('spawn', force=True)
 
 

@@ -6,3 +6,5 @@ logs/
 vis_results/
 log_batches_no_preload.txt
 *.pyc
+log*.txt
+*.pt
