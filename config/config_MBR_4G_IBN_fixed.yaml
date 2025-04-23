@@ -27,9 +27,9 @@ preload_test_rate: 1
 preload_num_workers: 2
 preload_batch_size: 128
 
-num_epochs: 80
+num_epochs: 130
 sampler: fixed_order # fixed_order or random_identity
-sampler_batches: /home/fedchin/vehicle_reid_itsc2023/saved_epochs_batches.pt
+sampler_batches: /home/fedchin/vehicle_reid_itsc2023/saved_epochs_batches.pkl
 
 y_length: 256
 x_length: 256

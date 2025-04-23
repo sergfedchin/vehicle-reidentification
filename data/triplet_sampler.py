@@ -7,6 +7,7 @@ import copy
 import random
 import os
 import os.path as osp
+import pickle
 
 import torch
 import torchvision
@@ -90,43 +91,31 @@ class RandomIdentitySampler(Sampler):
 
 
 class FixedOrderSampler(Sampler):
-    def __init__(self, saved_batches_path, num_epochs=80, batches_per_epoch=751, batch_size=48):
+    def __init__(self, saved_batches_path, num_epochs: int = 130):
         """
         Args:
             saved_batches_path (str): Path to .pt file with shape [epochs, batches_per_epoch, batch_size]
             num_epochs (int): Total epochs in saved file
-            batches_per_epoch (int): Batches per epoch in saved file
         """
         # Load the pre-saved batch indices
-        self.saved_batches: torch.Tensor = torch.load(saved_batches_path)  # shape [80, 751, 48]
-        
-        # Validate shape
-        assert self.saved_batches.shape[0] >= num_epochs
-        assert self.saved_batches.shape[1] == batches_per_epoch
-        assert self.saved_batches.shape[2] == batch_size, f"Expected shape [>={num_epochs}, {batches_per_epoch}, {batch_size}], got {self.saved_batches.shape}"
-        
-        self.num_epochs = num_epochs
-        self.batches_per_epoch = batches_per_epoch
-        self.batch_size = batch_size
         self.current_epoch = 0
-        
+
+        with open(saved_batches_path, 'rb') as f:
+            self.epochs_batches = pickle.load(f)
+
+        assert len(self.epochs_batches) >= num_epochs
+
     def set_epoch(self, epoch):
-        """Sets the current epoch to select correct pre-saved batches"""
         self.current_epoch = epoch
-        
+
     def __iter__(self):
-        """Yields indices in exact order from saved batches for current epoch"""
-        epoch_batches = self.saved_batches[self.current_epoch]  # shape [751, 48]
-        
-        # Flatten all batches into single sequence for this epoch
-        indices = epoch_batches.flatten()  # shape [751*48]
-        
-        # Yield indices one by one (DataLoader will regroup into batches)
-        yield from indices.tolist()
+        """Yields batches of current epoch"""
+        for batch in self.epochs_batches[self.current_epoch]:
+            yield batch
         
     def __len__(self):
-        """Total samples per epoch (batches_per_epoch * batch_size)"""
-        return self.batches_per_epoch * self.batch_size
+        """Number of batches in epoch"""
+        return len(self.epochs_batches[self.current_epoch])
 
 
 mp.set_start_method('spawn', force=True)
@@ -182,8 +171,11 @@ def preload_to_device_parallel(image_paths: list[str],
     imgs = [None] * len(image_paths)
     if preload_rate <= 0:
         return imgs
+    if preload_rate >= 1:
+        preload_mask = torch.ones(len(image_paths)).type(torch.bool)
+    else:
+        preload_mask = torch.rand(len(image_paths)) < preload_rate
     
-    preload_mask = torch.rand(len(image_paths)) < preload_rate
     loader_dataset = LoaderDataset(image_paths, transform, use_fp16, preload_mask)
     dataloader = DataLoader(
         loader_dataset,
@@ -314,7 +306,7 @@ class CUDADatasetVeri776Viewpoints(Dataset):
                                                preload_batch_size=preload_batch_size)
         self.data_info = self.names
 
-        print(f'Missed viewpoint for {n_missing_views}/{len(self.view)} images for {'train' if is_train else 'evaluation'}!')
+        print(f'Missed viewpoint for {n_missing_views}/{len(self.view)} images for {"train" if is_train else "evaluation"}!')
 
     def get_class(self, idx):
         return self.labels[idx]
