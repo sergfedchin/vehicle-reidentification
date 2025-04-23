@@ -2,8 +2,7 @@ model_arch: MBR_4G
 LAI: False
 n_cams: 20
 n_views: 8
-backbone: dinov2_vitb14_reg # dinov2_vit(s/b/l/g)14 dinov2_vit(s/b/l/g)14_reg
-# backbone: ibn
+backbone: dinov2-small # dinov2-small, dinov2-base, dinov2-large, dinov2-giant
 torch_seed: 0
 epoch_freeze_L1toL3: 10  # 10 !!!!!!!!!!!!!!!!! CHANGE TO 10
 freeze_triplet_branches: 0
@@ -21,25 +20,19 @@ BATCH_SIZE: 48 # 128 #48
 num_workers_train: 2 #8
 num_workers_test: 2
 
-preload_train_device: cuda  # cuda or cpu
-preload_train_rate: 0.75
+preload_train_device: cpu  # cuda or cpu
+preload_train_rate: 0.5
 preload_test_device: cpu  # cuda or cpu
-preload_test_rate: 1
+preload_test_rate: 0
 preload_num_workers: 2
 preload_batch_size: 128
-# preload_train_device: cuda  # cuda or cpu
-# preload_train_rate: 0.75
-# preload_test_device: cpu  # cuda or cpu
-# preload_test_rate: 1
-# preload_num_workers: 2
-# preload_batch_size: 128
 
-# y_length: 252
-# x_length: 252
+num_epochs: 130
+sampler: fixed_order # fixed_order or random_identity
+sampler_batches: /home/fedchin/vehicle_reid_itsc2023/saved_epochs_batches.pkl
+
 y_length: 256
 x_length: 256
-# y_length: 200
-# x_length: 200
 
 # Losses
 mean_losses: False
@@ -62,7 +55,6 @@ group_norm: False
 pretrain_gropnorm: False
 gn_init: kaiming
 pretrain_ongroups: True
-
 
 n_mean: [0.5, 0.5, 0.5]
 n_std: [0.5, 0.5, 0.5]
@@ -92,7 +84,6 @@ momentum: 0.9
 # scheduler settings
 sched_name: Warm_MultiStep
 min_lr: 7.75e-5
-num_epochs: 130
 milestones: [40, 70, 100]
 gamma: 0.1
 warmup_factor: 0.0
