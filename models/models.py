@@ -8,6 +8,7 @@ from torch import Tensor
 import numpy as np
 import copy
 import warnings
+from transformers import AutoModel
 
 
 def pdist(vectors):
@@ -48,7 +49,7 @@ class MHA(nn.Module):
         self.value = nn.Linear(n_dims, n_dims)
 
         self.mha = torch.nn.MultiheadAttention(n_dims, heads)
-        print('debug')
+        # print('debug')
 
     def forward(self, x):
         q = self.query(x)
@@ -144,9 +145,9 @@ class BottleneckTransformer(nn.Module):
 
 # Defines the new fc layer and classification layer
 # |--MLP--|--bn--|--relu--|--Linear--|
-class ClassBlock(nn.Module):
+class ClassificationBlock(nn.Module):
     def __init__(self, input_dim, class_num, droprate=0.0, relu=False, bnorm=True, linear=False, return_features = True, circle=False):
-        super(ClassBlock, self).__init__()
+        super(ClassificationBlock, self).__init__()
         self.return_features = return_features
         self.circle = circle
         add_block = []
@@ -257,8 +258,30 @@ class MHSA_2G(nn.Module):
         return x
 
 
+class DinoV2Backbone(nn.Module):
+    def __init__(self, model_name: str, n_groups: int):
+        super().__init__()
+        self.model = AutoModel.from_pretrained(f"facebook/{model_name}")
+        self.n_groups = n_groups
+    
+    def convert_to_backbone_format(self, t: torch.Tensor) -> torch.Tensor:
+        batch_size, n_pathes, n_channels = t.shape
+        side_length = int(torch.sqrt(torch.tensor(n_pathes)).item())
+        t_reshaped = t[:, 1:, :].reshape(batch_size, side_length, -1, n_channels).permute(0, 3, 1, 2)
+        channels_per_group = 1024 / self.n_groups
+        group_shift = int((n_channels - channels_per_group) // (self.n_groups - 1))
+        t_grouped = torch.cat([t_reshaped[:, i * group_shift:i * group_shift + 256, :, :] for i in range(self.n_groups)], dim=1)
+        return t_grouped
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        outputs = model(pixel_values=images)
+        patch_features: torch.Tensor = outputs.last_hidden_state  # Shape: (B, N, D)
+        reshaped_patch_features = self.convert_to_backbone_format(patch_features)
+        return reshaped_patch_features
+
+
 class BaseBranches(nn.Module):
-    def __init__(self, backbone="ibn", stride=1):
+    def __init__(self, backbone="ibn", stride: int = 1, n_groups: int = 4):
         super(BaseBranches, self).__init__()
         new_backbone = False
         if backbone == 'r50':
@@ -274,7 +297,7 @@ class BaseBranches(nn.Module):
             print(f'Backbone: {backbone}')
             new_backbone = True
             with warnings.catch_warnings(category=UserWarning, action="ignore"):
-                model_ft = torch.hub.load('facebookresearch/dinov2', backbone, pretrained=True)
+                model_ft = DinoV2Backbone(backbone, n_groups=n_groups)
         else:
             print('Backbone: resnet50_ibn_a')
             model_ft = torch.hub.load('XingangPan/IBN-Net', 'resnet50_ibn_a', pretrained=True)
@@ -364,7 +387,7 @@ class MultiBranches(nn.Module):
         else:
             self.model.append(model_ft)
         
-        print(self.model)
+        # print(self.model)
 
     def forward(self, x):
         output = []
@@ -382,65 +405,55 @@ class MultiBranches(nn.Module):
 
 
 class FinalLayer(nn.Module):
-    def __init__(self, n_classes, branches, n_groups, losses="LBS", droprate=0, linear_num=False, return_f = True, circle_softmax=False, n_cams=0, n_views=0, LAI=False, x2g=False,x4g=False):
+    def __init__(self,
+                 n_classes: int,
+                 branches: list[str],
+                 n_groups: int,
+                 losses: str = "LBS",
+                 droprate: float = 0,
+                 linear_num: bool = False,
+                 return_classification_features: bool = True,
+                 circle_softmax: bool = False,
+                 n_cams: int = 0,
+                 n_views: int = 0,
+                 LAI: bool = False,
+                 x2g: bool = False,
+                 x4g: bool = False,
+                 ):
         super(FinalLayer, self).__init__()    
         self.avg_pool = nn.AdaptiveAvgPool2d((1,1))
         self.finalblocks = nn.ModuleList()
         self.withLAI = LAI
+        self.LBS = losses == "LBS"
         if n_groups > 0:
             self.n_groups = n_groups
             for i in range(n_groups * (len(branches) + 1)):
-                if losses == "LBS":
-                    if i%2==0:
-                        self.finalblocks.append(ClassBlock(int(2048/n_groups), n_classes, droprate, linear=linear_num, return_features = return_f, circle=circle_softmax))
+                if self.LBS:
+                    if i % 2 == 0:
+                        # even branches are classification, uneven are with metric loss
+                        self.finalblocks.append(ClassificationBlock(int(2048 / n_groups), n_classes, droprate, linear=linear_num, return_features=return_classification_features, circle=circle_softmax))
                     else:
-                        bn= nn.BatchNorm1d(int(2048/n_groups))
+                        bn= nn.BatchNorm1d(int(2048 / n_groups))
                         bn.bias.requires_grad_(False)  
                         bn.apply(weights_init_kaiming)
                         self.finalblocks.append(bn)
                 else:
-                    self.finalblocks.append(ClassBlock(int(2048/n_groups), n_classes, droprate, linear=linear_num, return_features = return_f, circle=circle_softmax))
+                    self.finalblocks.append(ClassificationBlock(int(2048 / n_groups), n_classes, droprate, linear=linear_num, return_features=return_classification_features, circle=circle_softmax))
         else:
+            # not MBR_4G
             self.n_groups = 1
             for i in range(len(branches)):
-                if losses == "LBS":
-                    if i%2==0:
-                        self.finalblocks.append(ClassBlock(2048, n_classes, droprate, linear=linear_num, return_features = return_f, circle=circle_softmax))
+                if self.LBS:
+                    if i % 2==0:
+                        self.finalblocks.append(ClassificationBlock(2048, n_classes, droprate, linear=linear_num, return_features = return_classification_features, circle=circle_softmax))
                     else:
                         bn= nn.BatchNorm1d(int(2048))
                         bn.bias.requires_grad_(False)  
                         bn.apply(weights_init_kaiming)
                         self.finalblocks.append(bn)
                 else:
-                    self.finalblocks.append(ClassBlock(2048, n_classes, droprate, linear=linear_num, return_features = return_f, circle=circle_softmax))
+                    self.finalblocks.append(ClassificationBlock(2048, n_classes, droprate, linear=linear_num, return_features = return_classification_features, circle=circle_softmax))
 
-        if losses == "LBS":
-            self.LBS = True
-        else:
-            self.LBS = False
-
-        if self.withLAI:
-            # self.LAI = []
-            self.n_cams = n_cams
-            self.n_views = n_views
-            if n_groups>0 and len(branches)==0:
-                branches = ["groups"]
-            if n_cams>0 and n_views>0:
-                if x2g or x4g:
-                    self.LAI = nn.Parameter(torch.zeros(2, n_cams * n_views, 2048))
-                else:
-                    self.LAI = nn.Parameter(torch.zeros(len(branches), n_cams * n_views, 2048))
-            elif n_cams>0:
-                if x2g or x4g:
-                    self.LAI = nn.Parameter(torch.zeros(2, n_cams, 2048))
-                else:
-                    self.LAI = nn.Parameter(torch.zeros(len(branches), n_cams, 2048))
-            elif n_views>0:
-                if x2g or x4g:
-                    self.LAI = nn.Parameter(torch.zeros(2, n_views, 2048))
-                else:
-                    self.LAI = nn.Parameter(torch.zeros(len(branches), n_views, 2048))
-            else: self.withLAI = False
 
     def forward(self, x, cam, view):
         # if len(x) != len(self.finalblocks):
@@ -450,13 +463,6 @@ class FinalLayer(nn.Module):
         preds = []
         for i in range(len(x)):
             emb = self.avg_pool(x[i]).squeeze(dim=-1).squeeze(dim=-1)
-            if self.withLAI:
-                if self.n_cams > 0 and self.n_views > 0:
-                    emb = emb + self.LAI[i, cam * self.n_views + view, :]
-                elif self.n_cams > 0:
-                    emb = emb + self.LAI[i, cam, :]
-                else:
-                    emb = emb + self.LAI[i, view, :]
             for j in range(self.n_groups):
                 aux_emb = emb[:, int(2048 / self.n_groups * j):int(2048 / self.n_groups * (j + 1))]
                 if self.LBS:
@@ -488,11 +494,11 @@ class MBR_model(nn.Module):
                  n_cams: int = 0,
                  n_views: int = 0,
                  droprate: float = 0,
+                 return_f: bool = True,
+                 pretrain_ongroups: bool = True,
                  LAI: bool = False,
                  linear_num: bool = False,
-                 return_f: bool = True,
                  circle_softmax: bool = False,
-                 pretrain_ongroups: bool = True,
                  end_bot_g: bool = False,
                  group_conv_mhsa: bool = False,
                  group_conv_mhsa_2: bool = False,
@@ -501,9 +507,29 @@ class MBR_model(nn.Module):
                  ):
         super(MBR_model, self).__init__()  
 
-        self.modelup2L3 = BaseBranches(backbone=backbone)
-        self.modelL4 = MultiBranches(branches=branches, n_groups=n_groups, pretrain_ongroups=pretrain_ongroups, end_bot_g=end_bot_g, group_conv_mhsa=group_conv_mhsa, group_conv_mhsa_2=group_conv_mhsa_2, x2g=x2g, x4g=x4g)
-        self.finalblock = FinalLayer(n_classes=n_classes, branches=branches, n_groups=n_groups, losses=losses, droprate=droprate, linear_num=linear_num, return_f=return_f, circle_softmax=circle_softmax, LAI=LAI, n_cams=n_cams, n_views=n_views, x2g=x2g, x4g=x4g)
+        self.modelup2L3 = BaseBranches(backbone=backbone,
+                                       n_groups=n_groups)
+        self.modelL4 = MultiBranches(branches=branches,
+                                     n_groups=n_groups,
+                                     pretrain_ongroups=pretrain_ongroups,
+                                     end_bot_g=end_bot_g,
+                                     group_conv_mhsa=group_conv_mhsa,
+                                     group_conv_mhsa_2=group_conv_mhsa_2,
+                                     x2g=x2g,
+                                     x4g=x4g)
+        self.finalblock = FinalLayer(branches=branches,
+                                     n_classes=n_classes,
+                                     n_groups=n_groups,
+                                     losses=losses,
+                                     n_cams=n_cams,
+                                     n_views=n_views,
+                                     droprate=droprate,
+                                     return_classification_features=return_f,
+                                     LAI=LAI,
+                                     linear_num=linear_num,
+                                     circle_softmax=circle_softmax,
+                                     x2g=x2g,
+                                     x4g=x4g)
         
     def forward(self, images, cams, views):
         mix = self.modelup2L3(images)
