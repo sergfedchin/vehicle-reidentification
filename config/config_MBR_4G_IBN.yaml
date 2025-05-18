@@ -17,22 +17,22 @@ gpu: 0
 
 # Data
 BATCH_SIZE: 48 # 128 #48
-num_workers_train: 2 #8
-num_workers_test: 2
+num_workers_train: 1 #8
+num_workers_test: 1
 
-preload_train_device: cuda  # cuda or cpu
-preload_train_rate: 0
-preload_test_device: cuda  # cuda or cpu
+preload_train_device: cpu  # cuda or cpu
+preload_train_rate: 1
+preload_test_device: cpu  # cuda or cpu
 preload_test_rate: 0
 preload_num_workers: 2
 preload_batch_size: 128
 
 num_epochs: 130
 sampler: random_identity # fixed_order or random_identity
-# sampler_batches: /home/fedchin/vehicle_reid_itsc2023/saved_epochs_batches.pt
+# sampler_batches: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/saved_epochs_batches.pkl
 
-y_length: 256
-x_length: 256
+y_length: 128
+x_length: 128
 
 # Losses
 mean_losses: False
@@ -66,13 +66,19 @@ dataset: Veri776
 
 n_classes: 576
 NUM_INSTANCES: 8 #8
-images_dir: /home/fedchin/vehicle_reid_itsc2023/dataset/veri_images
-query_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_query_list.txt
-gallery_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_test_list.txt
-train_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_train_list.txt
+images_dir: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/veri_images
+query_list_file: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/VeRi/original_veri_query_list.txt
+gallery_list_file: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/VeRi/original_veri_test_list.txt
+train_list_file: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/VeRi/original_veri_train_list.txt
+# images_dir: /home/fedchin/vehicle_reid_itsc2023/dataset/veri_images
+# query_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_query_list.txt
+# gallery_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_test_list.txt
+# train_list_file: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/original_veri_train_list.txt
 
-test_keypoints: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/keypoint_orient_test.txt
-train_keypoints: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/keypoint_orient_train.txt
+test_keypoints: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/VeRi/keypoint_orient_test.txt
+train_keypoints: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/VeRi/keypoint_orient_train.txt
+# test_keypoints: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/keypoint_orient_test.txt
+# train_keypoints: /home/fedchin/vehicle_reid_itsc2023/dataset/VeRi/keypoint_orient_train.txt
 
 # Define an optimizer settings
 optimizer: Adam # Adam SGD

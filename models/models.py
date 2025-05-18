@@ -5,7 +5,7 @@ from torchvision import models
 import torch.nn.functional as F
 from torch import Tensor
 # from torchsummary import summary
-import numpy as np
+# import numpy as np
 import copy
 import warnings
 from transformers import AutoModel
@@ -16,7 +16,9 @@ def pdist(vectors):
         dim=1).view(-1, 1)
     return distance_matrix
 
+
 def count_parameters(model): return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 
 def weights_init_kaiming(m):
     classname = m.__class__.__name__
@@ -47,16 +49,13 @@ class MHA(nn.Module):
         self.query = nn.Linear(n_dims, n_dims)
         self.key = nn.Linear(n_dims, n_dims)
         self.value = nn.Linear(n_dims, n_dims)
-
         self.mha = torch.nn.MultiheadAttention(n_dims, heads)
-        # print('debug')
 
     def forward(self, x):
         q = self.query(x)
         k = self.key(x)
         v = self.value(x)
-        out = self.mha(q,k,v)
-
+        out = self.mha(q, k, v)
         return out
 
 
@@ -196,23 +195,6 @@ class ClassificationBlock(nn.Module):
             return x
 
 
-class GroupNormwMomentum(nn.Module):
-    def __init__(self, n_groups, n_channels):
-        super().__init__()
-        
-        self.gn = nn.ModuleList()
-        for i in range(n_groups):
-            self.gn.append(nn.BatchNorm2d(int(n_channels/2)).apply(weights_init_kaiming))
-    
-    def forward(self, x):
-        size_feat = int(x.size(1)/2)
-        x_left  = x[:,:size_feat]
-        x_right = x[:,size_feat:]
-        x_left = self.gn[0](x_left)
-        x_right = self.gn[1](x_right)
-        return torch.cat((x_left, x_right), dim=1)
-
-
 class Conv_MHSA_2G(nn.Module):
     def __init__(self, c_in, c_out, resolution=[16,16], heads=4) -> None:
         super().__init__()
@@ -231,14 +213,14 @@ class Conv_MHSA_2G(nn.Module):
 class Conv_MHSA_4G(nn.Module):
     def __init__(self, c_in, c_out, resolution=[16, 16], heads=4) -> None:
         super().__init__()
-        self.conv2 = nn.Conv2d(c_in//2, c_out//2, kernel_size=3, stride=1, padding=1, groups=2, bias=False)
-        self.MHSA_1 = MHSA(c_out//4, width=int(resolution[0]), height=int(resolution[1]), heads=heads)
-        self.MHSA_2 = MHSA(c_out//4, width=int(resolution[0]), height=int(resolution[1]), heads=heads)
+        self.conv2 = nn.Conv2d(c_in // 2, c_out // 2, kernel_size=3, stride=1, padding=1, groups=2, bias=False)
+        self.MHSA_1 = MHSA(c_out // 4, width=resolution[0], height=resolution[1], heads=heads)
+        self.MHSA_2 = MHSA(c_out // 4, width=resolution[0], height=resolution[1], heads=heads)
 
     def forward(self,x):
-        x_12 = self.conv2(x[:,:x.size(1)//2,:,:])
-        x_3 = self.MHSA_1(x[:,x.size(1)//2:x.size(1)//2+x.size(1)//4,:,:])
-        x_4 = self.MHSA_2(x[:,x.size(1)//2+x.size(1)//4:,:,:])
+        x_12 = self.conv2(x[:, :x.size(1) // 2, :, :])
+        x_3 = self.MHSA_1(x[:, x.size(1) // 2:x.size(1) // 2 + x.size(1) // 4, :, :])
+        x_4 = self.MHSA_2(x[:, x.size(1) // 2 + x.size(1) // 4:, :, :])
         x = torch.cat((x_12, x_3, x_4), dim=1)
 
         return x
@@ -264,18 +246,18 @@ class DinoV2Backbone(nn.Module):
         self.model = AutoModel.from_pretrained(f"facebook/{model_name}")
         self.n_groups = n_groups
     
-    def convert_to_backbone_format(self, t: torch.Tensor) -> torch.Tensor:
+    def convert_to_backbone_format(self, t: Tensor) -> Tensor:
         batch_size, n_pathes, n_channels = t.shape
-        side_length = int(torch.sqrt(torch.tensor(n_pathes)).item())
+        side_length = int(torch.sqrt(Tensor(n_pathes)).item())
         t_reshaped = t[:, 1:, :].reshape(batch_size, side_length, -1, n_channels).permute(0, 3, 1, 2)
         channels_per_group = 1024 / self.n_groups
         group_shift = int((n_channels - channels_per_group) // (self.n_groups - 1))
         t_grouped = torch.cat([t_reshaped[:, i * group_shift:i * group_shift + 256, :, :] for i in range(self.n_groups)], dim=1)
         return t_grouped
 
-    def forward(self, images: torch.Tensor) -> torch.Tensor:
-        outputs = model(pixel_values=images)
-        patch_features: torch.Tensor = outputs.last_hidden_state  # Shape: (B, N, D)
+    def forward(self, images: Tensor) -> Tensor:
+        outputs = self.model(pixel_values=images)
+        patch_features = outputs.last_hidden_state  # Shape: (B, N, D)
         reshaped_patch_features = self.convert_to_backbone_format(patch_features)
         return reshaped_patch_features
 
@@ -296,8 +278,7 @@ class BaseBranches(nn.Module):
         elif 'dinov2' in backbone:
             print(f'Backbone: {backbone}')
             new_backbone = True
-            with warnings.catch_warnings(category=UserWarning, action="ignore"):
-                model_ft = DinoV2Backbone(backbone, n_groups=n_groups)
+            model_ft = DinoV2Backbone(backbone, n_groups=n_groups)
         else:
             print('Backbone: resnet50_ibn_a')
             model_ft = torch.hub.load('XingangPan/IBN-Net', 'resnet50_ibn_a', pretrained=True)
@@ -483,7 +464,7 @@ class FinalLayer(nn.Module):
                     
         return preds, embs, ffs
 
-    
+
 class MBR_model(nn.Module):         
     def __init__(self,
                  branches: list[str],

@@ -127,11 +127,16 @@ def read_image_and_transform(image_path: str,
                              device: torch.device = torch.device('cpu'),
                              ) -> torch.Tensor:
     image = torchvision.io.read_image(image_path)
+    # if image_path == '/home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/veri_images/0370_c009_00064640_0.jpg':
+    #     print(f'INSIDE read_image_and_transform after just read:', image)
     if transform:
         image = transform((image.type(torch.FloatTensor)) / 255.0)
     if use_fp16:
         image = image.half()
-    return image.to(device)
+    image = image.to(device)
+    # if image_path == '/home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/veri_images/0370_c009_00064640_0.jpg':
+    #     print(f'INSIDE read_image_and_transform before moving to device:', image)
+    return image
 
 
 class LoaderDataset(Dataset):
@@ -153,6 +158,9 @@ class LoaderDataset(Dataset):
         if self.preload_mask[idx]:
             # chosen to load
             image = read_image_and_transform(self.paths[idx], self.transform, self.use_fp16)
+            if idx == 10679:
+                print(f'LOADING IMAGE 10679: read_image_and_transform({self.paths[idx]}, {self.transform}, {self.use_fp16})')
+                print(f'LOADED:', image)
         else:
             image = self.empty_image
         return idx, image
@@ -182,7 +190,7 @@ def preload_to_device_parallel(image_paths: list[str],
         batch_size=preload_batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=False,  # was TRUE for server!!!!!!!!!!!!!!!!! TODO
         persistent_workers=False
     )
 
@@ -192,7 +200,10 @@ def preload_to_device_parallel(image_paths: list[str],
     for batch in tqdm(dataloader, desc=f'Preloading {int(preload_rate * 100)}% to {str(preload_device).upper()}', unit='batch'):
         for index, image in zip(*batch):
             if preload_mask[index]:
-                imgs[index] = image.to(preload_device)
+                image = image.to(preload_device)
+                if index == 10679:
+                    print(f'SAVED AT INDEX 10679:', image)
+                imgs[index] = image
     del dataloader
     torch.cuda.empty_cache()
     return imgs
@@ -203,7 +214,8 @@ class CUDADatasetVeri776(Dataset):
                  image_list: str,
                  images_dir: str,
                  is_train: bool = True,
-                 transform: torchvision.transforms.Compose | bool = False,
+                 base_transform: torchvision.transforms.Compose | bool = False,
+                 random_transform: torchvision.transforms.Compose | bool = False,
                  device: str | torch.device = 'cuda',
                  use_fp16: bool = True,
                  preload_rate: float = 1,
@@ -211,7 +223,8 @@ class CUDADatasetVeri776(Dataset):
                  preload_batch_size: int = 32,
                  ):
         self.root_dir = images_dir
-        self.transform = transform
+        self.base_transform = base_transform
+        self.random_transform = random_transform
         self.device = torch.device(device)
         self.use_fp16 = use_fp16
         
@@ -219,6 +232,7 @@ class CUDADatasetVeri776(Dataset):
         with open(image_list) as f:
             lines = f.readlines()
         
+        # parsing file names
         self.names, self.labels, self.cams = tuple(map(list, zip(*[(line, *((lambda x: (int(x[0]), int(x[1][1:])))(line.split('_')[:2]))) for line in map(lambda s: s.strip(), lines)])))
         
         # Remap labels for training
@@ -230,14 +244,17 @@ class CUDADatasetVeri776(Dataset):
         self.paths = list(map(lambda x: osp.join(self.root_dir, x), self.names))
 
         # Preload images
-        self.imgs = preload_to_device_parallel(image_paths=self.paths,
-                                               transform=transform,
-                                               num_workers=preload_num_workers,
-                                               use_fp16=use_fp16,
-                                               preload_device=device,
-                                               preload_rate=preload_rate,
-                                               preload_batch_size=preload_batch_size)
+        # self.imgs = preload_to_device_parallel(image_paths=self.paths,
+        #                                        transform=base_transform,
+        #                                        num_workers=preload_num_workers,
+        #                                        use_fp16=use_fp16,
+        #                                        preload_device=device,
+        #                                        preload_rate=preload_rate,
+        #                                        preload_batch_size=preload_batch_size)
+        self.imgs = [None] * len(self.names)
         self.data_info = self.names
+        self.num_preloaded = 0
+        self.preload_rate = preload_rate
 
     def get_class(self, idx):
         return self.labels[idx]
@@ -246,15 +263,24 @@ class CUDADatasetVeri776(Dataset):
         return len(self.names)
 
     def __getitem__(self, idx):
+        # print(f'REQUESTED IDX', idx)
         if torch.is_tensor(idx):
             idx = idx.tolist()
         worker_id = torch.utils.data.get_worker_info().id
         vehicle_id = torch.tensor(self.labels[idx], dtype=torch.long, device=self.device)
         cam_id = torch.tensor(self.cams[idx], dtype=torch.long, device=self.device)
-        image = self.imgs[idx]
-        if image is None:
-            image = read_image_and_transform(self.paths[idx], self.transform, self.use_fp16, self.device)
-        return image, vehicle_id, cam_id, 0, idx, worker_id
+        # image = self.imgs[idx]
+        # if image is None:
+        #     image = read_image_and_transform(self.paths[idx], self.transform, self.use_fp16, self.device)
+        #     if idx == 10679:
+        #         print(f'LOADING IMAGE 10679: read_image_and_transform({self.paths[idx]}, {self.transform}, {self.use_fp16}, {self.device})')
+        #         print(f'LOADED:', image)
+        if (image := self.imgs[idx]) is None:
+            image = read_image_and_transform(self.paths[idx], self.base_transform, self.use_fp16, self.device)
+            if (self.num_preloaded + 1) / len(self.names) <= self.preload_rate:
+                self.imgs[idx] = image
+                self.num_preloaded += 1
+        return self.random_transform(image), vehicle_id, cam_id, 0, idx, worker_id
 
 
 class CUDADatasetVeri776Viewpoints(Dataset):

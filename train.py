@@ -124,9 +124,10 @@ if __name__ == "__main__":
                       transforms.Normalize(data['n_mean'], data['n_std'])
     ])
                   
-    train_transform = transforms.Compose([
+    train_base_transform = transforms.Compose([
                     transforms.Resize((data['y_length'],data['x_length']), antialias=True),
-                    transforms.Pad(10),
+                    transforms.Pad(10)])
+    train_random_transform = transforms.Compose([
                     transforms.RandomCrop((data['y_length'], data['x_length'])),
                     transforms.RandomHorizontalFlip(p=data['p_hflip']),
                     transforms.Normalize(data['n_mean'], data['n_std']),
@@ -184,7 +185,8 @@ if __name__ == "__main__":
         data_train = CUDADatasetVeri776(image_list=data['train_list_file'],
                                         images_dir=data['images_dir'],
                                         is_train=True,
-                                        transform=train_transform,
+                                        base_transform=train_base_transform,
+                                        random_transform=train_random_transform,
                                         device=data['preload_train_device'],
                                         use_fp16=data['half_precision'],
                                         preload_rate=data['preload_train_rate'],
@@ -294,8 +296,8 @@ if __name__ == "__main__":
         
         # Step schedule
         if epoch >= data['epoch_freeze_L1toL3'] - 1:
-            with warnings.catch_warnings(category=UserWarning, action="ignore"):            
-                scheduler.step()
+            # with warnings.catch_warnings(category=UserWarning, action="ignore"):            
+            scheduler.step()
 
         # Train Loop
         time_since_start = time.time() - script_start_time
@@ -317,7 +319,7 @@ if __name__ == "__main__":
             cmc, mAP = test_epoch(model, device, data_query, data_gallery, data['model_arch'], logger, epoch, remove_junk=True, scaler=scaler)
             evaluation_time = time.time() - start_time
             print(f'\nTotal evaluation time: {format_time(evaluation_time)}')
-            print(f'\nEpoch {epoch + 1}/{data['num_epochs']}: Train Loss {train_loss:.4f} | CrossEntropy Loss {ce_loss:.4f} | Triplet Loss {triplet_loss:.4f} | Test mAP {mAP:.4f} | CMC1 {cmc[0]:.4f} | CMC5 {cmc[4]:.4f}\n')
+            print(f'\nEpoch {epoch + 1}/{data["num_epochs"]}: Train Loss {train_loss:.4f} | CrossEntropy Loss {ce_loss:.4f} | Triplet Loss {triplet_loss:.4f} | Test mAP {mAP:.4f} | CMC1 {cmc[0]:.4f} | CMC5 {cmc[4]:.4f}\n')
             logger.save_model(model)
 
     print(f"Best mAP: {np.max(logger.logscalars['Accuraccy/mAP'])}")

@@ -5,9 +5,6 @@ from models.models import MBR_model
 from tqdm import tqdm
 import numpy as np
 from metrics.eval_reid import eval_func
-import os
-from tensorboard_log import Logger
-
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
@@ -110,7 +107,7 @@ def get_model(data, device):
     return model.to(device)
 
 
-def train_epoch(model: MBR_model, device, dataloader: torch.utils.data.DataLoader, ce_loss_fn, triplet_loss_fn, optimizer, data, alpha_ce: float, beta_triplet: float, logger: Logger, epoch: int, scheduler=None, scaler=False):
+def train_epoch(model, device, dataloader, loss_fn, triplet_loss, optimizer, data, alpha_ce, beta_triplet, logger, epoch, scheduler=None, scaler=False):
     # Set train mode for both the encoder and the decoder
     model.train()
     train_loss = []
@@ -121,7 +118,6 @@ def train_epoch(model: MBR_model, device, dataloader: torch.utils.data.DataLoade
     gamma_t = data['gamma_t']
     model_arch = data['model_arch']
 
-    epoch_loop = tqdm(dataloader, position=0, desc=f'Epoch {epoch + 1}', bar_format='{l_bar}{bar:20}{r_bar}', unit='batch', leave=True)
     loss_ce_log =      tqdm(total=0, position=1, bar_format='{desc}', leave=True)
     loss_triplet_log = tqdm(total=0, position=2, bar_format='{desc}', leave=True)
     loss_log =         tqdm(total=0, position=3, bar_format='{desc}', leave=True)
@@ -129,9 +125,8 @@ def train_epoch(model: MBR_model, device, dataloader: torch.utils.data.DataLoade
     n_images = 0
     acc_v = 0
     stepcount = 0
-
-    # os.mkdir(f'batch_logs/epoch_{epoch:03d}')
-    for batch_id, (batch_images, batch_labels, batch_cams, batch_views, batch_indices, batch_workers) in enumerate(epoch_loop): 
+    for batch_id, (batch_images, batch_labels, batch_cams, batch_views, batch_indices, batch_workers) in enumerate(tqdm(dataloader, position=4, desc=f'Epoch {epoch + 1}', bar_format='{l_bar}{bar:20}{r_bar}', unit='batch', leave=True)): 
+        # Move tensor to the proper device
         loss_ce = 0
         loss_triplet = 0
         optimizer.zero_grad()
@@ -142,6 +137,8 @@ def train_epoch(model: MBR_model, device, dataloader: torch.utils.data.DataLoade
         # torch.save(batch_indices.type(torch.int32), f'batch_logs/epoch_{epoch:03d}/batch_{batch_id:05d}_worker_{torch.unique(batch_workers).item()}.pt')
         # with open('log_batches_no_preload.txt', 'a') as f:
         #     f.write(f'Worker {torch.unique(batch_workers).item()}:\n{'\n'.join(map(str, batch_indices.tolist()))}')
+        # if batch_id == 0:
+        #     print(f'BATCH {batch_id}: last image (idx {batch_indices[-1]}):', batch_images[-1])
         if scaler:
             with torch.autocast(device_type="cuda", dtype=torch.float16):
                 preds, embs, _, _ = model(batch_images, batch_cams, batch_views)
@@ -152,14 +149,14 @@ def train_epoch(model: MBR_model, device, dataloader: torch.utils.data.DataLoade
                     embs = [embs]
                 for i, item in enumerate(preds):
                     if i % 2 == 0 or "aseline" in model_arch or "R50" in model_arch:
-                        loss_ce += alpha_ce * ce_loss_fn(item, batch_labels)
+                        loss_ce += alpha_ce * loss_fn(item, batch_labels)
                     else:
-                        loss_ce += gamma_ce * ce_loss_fn(item, batch_labels)
+                        loss_ce += gamma_ce * loss_fn(item, batch_labels)
                 for i, item in enumerate(embs):
                     if i % 2 == 0 or "aseline" in model_arch or "R50" in model_arch:
-                        loss_triplet += beta_triplet * triplet_loss_fn(item, batch_labels)
+                        loss_triplet += beta_triplet * triplet_loss(item, batch_labels)
                     else:
-                        loss_triplet += gamma_t * triplet_loss_fn(item, batch_labels)
+                        loss_triplet += gamma_t * triplet_loss(item, batch_labels)
 
                 if data['mean_losses']:
                     loss = loss_ce/len(preds) + loss_triplet/len(embs)
@@ -174,15 +171,15 @@ def train_epoch(model: MBR_model, device, dataloader: torch.utils.data.DataLoade
                 preds = [preds]
                 embs = [embs]
             for i, item in enumerate(preds):
-                if i % 2 == 0 or "aseline" in model_arch or "R50" in model_arch:
-                    loss_ce += alpha_ce * ce_loss_fn(item, batch_labels)
+                if i % 2==0 or "aseline" in model_arch or "R50" in model_arch:
+                    loss_ce += alpha_ce * loss_fn(item, batch_labels)
                 else:
-                    loss_ce += gamma_ce * ce_loss_fn(item, batch_labels)
+                    loss_ce += gamma_ce * loss_fn(item, batch_labels)
             for i, item in enumerate(embs):
-                if i % 2 == 0 or "aseline" in model_arch or "R50" in model_arch:
-                    loss_triplet += beta_triplet * triplet_loss_fn(item, batch_labels)
+                if i % 2==0 or "aseline" in model_arch or "R50" in model_arch:
+                    loss_triplet += beta_triplet * triplet_loss(item, batch_labels)
                 else:
-                    loss_triplet += gamma_t * triplet_loss_fn(item, batch_labels)
+                    loss_triplet += gamma_t * triplet_loss(item, batch_labels)
 
             if data['mean_losses']:
                 loss = loss_ce/len(preds) + loss_triplet/len(embs)
@@ -208,9 +205,9 @@ def train_epoch(model: MBR_model, device, dataloader: torch.utils.data.DataLoade
         loss_triplet_log.set_description_str(f'Triplet Loss:      {loss_triplet.data:.4f}')
         loss_log.set_description_str(        f'Total Train loss:  {loss.data:.4f}')
 
+        train_loss.append(loss.detach().cpu().numpy())
         ce_loss_log.append(loss_ce.detach().cpu().numpy())
         triplet_loss_log.append(loss_triplet.detach().cpu().numpy())
-        train_loss.append(loss.detach().cpu().numpy())
 
     logger.write_scalars({"Loss/train_total": np.mean(train_loss), 
                           "Loss/train_crossentropy": np.mean(ce_loss_log),
