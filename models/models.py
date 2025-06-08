@@ -247,8 +247,8 @@ class DinoV2Backbone(nn.Module):
         self.n_groups = n_groups
     
     def convert_to_backbone_format(self, t: Tensor) -> Tensor:
-        batch_size, n_pathes, n_channels = t.shape
-        side_length = int(torch.sqrt(Tensor(n_pathes)).item())
+        batch_size, n_patches, n_channels = t.shape
+        side_length = int(torch.sqrt(torch.tensor(n_patches, dtype=float)).item())
         t_reshaped = t[:, 1:, :].reshape(batch_size, side_length, -1, n_channels).permute(0, 3, 1, 2)
         channels_per_group = 1024 / self.n_groups
         group_shift = int((n_channels - channels_per_group) // (self.n_groups - 1))
@@ -439,8 +439,8 @@ class FinalLayer(nn.Module):
     def forward(self, x, cam, view):
         # if len(x) != len(self.finalblocks):
         #     print("Something is wrong")
-        embs = []
-        ffs = []
+        aux_embs = []
+        embeddings = []
         preds = []
         for i in range(len(x)):
             emb = self.avg_pool(x[i]).squeeze(dim=-1).squeeze(dim=-1)
@@ -448,21 +448,21 @@ class FinalLayer(nn.Module):
                 aux_emb = emb[:, int(2048 / self.n_groups * j):int(2048 / self.n_groups * (j + 1))]
                 if self.LBS:
                     if (i + j) % 2 == 0:
-                        pred, ff = self.finalblocks[i+j](aux_emb)
-                        ffs.append(ff)
+                        pred, ff = self.finalblocks[i + j](aux_emb)
+                        embeddings.append(ff)
                         preds.append(pred)
                     else:
                         ff = self.finalblocks[i + j](aux_emb)
-                        embs.append(aux_emb)
-                        ffs.append(ff)
+                        aux_embs.append(aux_emb)
+                        embeddings.append(ff)
                 else:
                     aux_emb = emb[:, int(2048 / self.n_groups * j):int(2048 / self.n_groups * (j + 1))]
-                    pred, ff = self.finalblocks[i+j](aux_emb)
-                    embs.append(aux_emb)
-                    ffs.append(ff)
+                    pred, ff = self.finalblocks[i + j](aux_emb)
+                    aux_embs.append(aux_emb)
+                    embeddings.append(ff)
                     preds.append(pred)
                     
-        return preds, embs, ffs
+        return preds, aux_embs, embeddings
 
 
 class MBR_model(nn.Module):         
@@ -515,18 +515,21 @@ class MBR_model(nn.Module):
     def forward(self, images, cams, views):
         mix = self.modelup2L3(images)
         output = self.modelL4(mix)
-        preds, embs, ffs = self.finalblock(output, cams, views)
+        preds, embs, embeddings = self.finalblock(output, cams, views)
 
-        return preds, embs, ffs, output
-
-
-if __name__ == "__main__":
-    input = torch.randn((32, 3, 256, 256))
-
-    ### MBR_4B
-    model = MBR_model(575, ["R50", "R50", "BoT", "BoT"], n_groups=0, losses ="LBS", LAI=True)
-    preds, embs, ffs, output = model(input, torch.randint(0, 19, (32, 1)), torch.randint(0, 7, (32,8)))
-    print("\nn_preds: ", len(preds))
-    print("n_embs: ", len(embs))
-    print("ffs: ", len(ffs))
-
+        return preds, embs, embeddings, output
+    
+    def montecarlo_predict(self, images, cams, views, iters: int = 100):
+        self.modelup2L3.train()
+        mc_res = []
+        for _ in range(iters):
+            mix = self.modelup2L3(images)
+            output = self.modelL4(mix)
+            preds, embs, embeddings = self.finalblock(output, cams, views)
+            mc_res.append((torch.stack(preds), torch.stack(embs), torch.stack(embeddings), torch.stack(output)))
+        
+        averaged = tuple(
+            torch.stack(tensors).mean(dim=0)
+            for tensors in zip(*mc_res)
+        )
+        return averaged

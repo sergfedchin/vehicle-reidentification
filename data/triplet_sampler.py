@@ -201,8 +201,8 @@ def preload_to_device_parallel(image_paths: list[str],
         for index, image in zip(*batch):
             if preload_mask[index]:
                 image = image.to(preload_device)
-                if index == 10679:
-                    print(f'SAVED AT INDEX 10679:', image)
+                # if index == 10679:
+                #     print(f'SAVED AT INDEX 10679:', image)
                 imgs[index] = image
     del dataloader
     torch.cuda.empty_cache()

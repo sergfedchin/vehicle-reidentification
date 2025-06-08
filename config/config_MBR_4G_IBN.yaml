@@ -27,12 +27,10 @@ preload_test_rate: 0
 preload_num_workers: 2
 preload_batch_size: 128
 
-num_epochs: 130
-sampler: random_identity # fixed_order or random_identity
-# sampler_batches: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/saved_epochs_batches.pkl
+num_epochs: 100
 
-y_length: 128
-x_length: 128
+y_length: 64
+x_length: 64
 
 # Losses
 mean_losses: False

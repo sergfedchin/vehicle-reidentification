@@ -34,7 +34,14 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark= False
 
 
-def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, remove_junk=True, scaler=None, re_rank=False):
+def test_epoch(model,
+               device, dataloader_q,
+               dataloader_g,
+               remove_junk: bool = True,
+               scaler = None,
+               re_rank: bool = False,
+               use_montecarlo: bool = False,
+               montecarlo_iters: int = 30):
     model.eval()
     # re_escala = torchvision.transforms.Resize((256,256), antialias=True)
     qf = []
@@ -45,43 +52,49 @@ def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, remove_jun
     g_vids = []
     q_images = []
     g_images =  []
-    count_imgs = 0
-    # blend_ratio =0.3
     with torch.no_grad():
         for image, q_id, cam_id, view_id  in tqdm(dataloader_q, desc='Embedding query', bar_format='{l_bar}{bar:20}{r_bar}', leave=True, unit='batch'):
             image = image.to(device)
             if scaler:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
-                    _, _, ffs, activations = model(image, cam_id, view_id)
+                    if use_montecarlo:
+                        _, _, embeddings, activations = model.montecarlo_predict(image, cam_id, view_id, iters=montecarlo_iters)
+                    else:
+                        _, _, embeddings, activations = model(image, cam_id, view_id)
             else:
-                _, _, ffs, activations = model(image, cam_id, view_id)
+                if use_montecarlo:
+                    _, _, embeddings, activations = model.montecarlo_predict(image, cam_id, view_id, iters=montecarlo_iters)
+                else:
+                    _, _, embeddings, activations = model(image, cam_id, view_id)
                     
-            count_imgs += activations[0].shape[0]
             end_vec = []
-            for item in ffs:
+            for item in embeddings:
                 end_vec.append(F.normalize(item))
             qf.append(torch.cat(end_vec, 1))
             q_vids.append(q_id)
             q_camids.append(cam_id)
 
         del q_images
-        count_imgs = 0
         for image, g_id, cam_id, view_id in tqdm(dataloader_g, desc='Embedding gallery', bar_format='{l_bar}{bar:20}{r_bar}', leave=True, unit='batch'):
             image = image.to(device)
             if scaler:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
-                    _, _, ffs, activations = model(image, cam_id, view_id)
+                    if use_montecarlo:
+                        _, _, embeddings, _ = model.montecarlo_predict(image, cam_id, view_id, iters=montecarlo_iters)
+                    else:
+                        _, _, embeddings, _ = model(image, cam_id, view_id)
             else:
-                _, _, ffs, activations = model(image, cam_id, view_id)
+                if use_montecarlo:
+                    _, _, embeddings, _ = model.montecarlo_predict(image, cam_id, view_id, iters=montecarlo_iters)
+                else:
+                    _, _, embeddings, _ = model(image, cam_id, view_id)
 
             end_vec = []
-            for item in ffs:
+            for item in embeddings:
                 end_vec.append(F.normalize(item))
-            gf.append(torch.cat(end_vec, 1))
+            gf.append(torch.cat(end_vec, dim=1))
             g_vids.append(g_id)
             g_camids.append(cam_id)
-
-            count_imgs += activations[0].shape[0]
 
         del g_images
 
@@ -90,8 +103,9 @@ def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, remove_jun
 
     m, n = qf.shape[0], gf.shape[0]   
     if re_rank:
-        distmat = re_ranking(qf, gf, k1=80, k2=16, lambda_value=0.3)
+        distmat = re_ranking(qf, gf, k1 = 80, k2 = 16, lambda_value=0.3)
     else:
+        # Euclidian distance matrix
         distmat =  torch.pow(qf, 2).sum(dim=1, keepdim=True).expand(m, n) + \
                 torch.pow(gf, 2).sum(dim=1, keepdim=True).expand(n, m).t()
         distmat.addmm_(qf, gf.t(),beta=1, alpha=-2)
@@ -103,9 +117,7 @@ def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, remove_jun
     g_vids = torch.cat(g_vids, dim=0).cpu().numpy()   
     del qf, gf
 
-    
     cmc, mAP = eval_func(distmat, q_vids, g_vids, q_camids, g_camids, remove_junk=remove_junk, num_visual_samples=7, output_dir="vis_results")
-    print(f'mAP = {mAP}, CMC1 = {cmc[0]}, CMC5 = {cmc[4]}')
 
     return cmc, mAP
 
@@ -120,6 +132,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_arch', default=None, help='Model Architecture')
     parser.add_argument('--path_weights', default=None, help="Path to *.pth/*.pt loading weights file")
     parser.add_argument('--re_rank', action="store_true", help="Re-Rank")
+    parser.add_argument('--monte_carlo', action="store_true", help="Use Monte-Carlo for inference")
     args = parser.parse_args()
 
     path_weights = args.path_weights
@@ -208,7 +221,7 @@ if __name__ == "__main__":
     mean = False
     l2 = True
 
-    cmc, mAP = test_epoch(model, device, data_query, data_gallery, data['model_arch'], remove_junk=True, scaler=scaler, re_rank=args.re_rank)
+    cmc, mAP = test_epoch(model, device, data_query, data_gallery, remove_junk=True, scaler=scaler, re_rank=args.re_rank, use_montecarlo=args.monte_carlo)
 
     print(f'\nEvaluation results: mAP = {mAP:.4f} | CMC1 = {cmc[0]:.4f} | CMC5 = {cmc[4]:.4f}')
     with open(osp.join(log_folder_path, f'result_map_l2_{l2}_mean_{mean}.npy'), 'wb') as f:

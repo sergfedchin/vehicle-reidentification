@@ -66,7 +66,7 @@ def eval_func(distance_matrix: np.ndarray,
         
         num_rel = orig_cmc.sum()
         tmp_cmc = orig_cmc.cumsum()
-        tmp_cmc = [x/(i+1.) for i,x in enumerate(tmp_cmc)]
+        tmp_cmc = [x / (i + 1) for i, x in enumerate(tmp_cmc)]
         AP = np.array(tmp_cmc)[orig_cmc.astype(bool)].sum() / num_rel
         all_AP.append(AP)
     
