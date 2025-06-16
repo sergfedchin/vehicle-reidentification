@@ -4,7 +4,7 @@ n_cams: 20
 n_views: 8
 backbone: ibn # dinov2_vit(s/b/l/g)14 dinov2_vit(s/b/l/g)14_reg
 torch_seed: 0
-epoch_freeze_L1toL3: 10  # 10 !!!!!!!!!!!!!!!!! CHANGE TO 10
+epoch_freeze_L1toL3: 10
 freeze_triplet_branches: 0
 freeze_backbone_warmup: False  # for circle
 branch_layer: 3
@@ -12,8 +12,8 @@ validation_period: 10
 
 # GPU Settings
 half_precision: True
-parallel: False
-gpu: 0
+parallel: False  # multiple GPUs
+gpu: 0  # CUDA ID
 
 # Data
 BATCH_SIZE: 48 # 128 #48
@@ -23,14 +23,14 @@ num_workers_test: 1
 preload_train_device: cpu  # cuda or cpu
 preload_train_rate: 1
 preload_test_device: cpu  # cuda or cpu
-preload_test_rate: 0
+preload_test_rate: 1
 preload_num_workers: 2
 preload_batch_size: 128
 
-num_epochs: 100
+num_epochs: 130
 
-y_length: 64
-x_length: 64
+y_length: 320
+x_length: 320
 
 # Losses
 mean_losses: False

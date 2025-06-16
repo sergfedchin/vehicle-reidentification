@@ -1,10 +1,12 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from models.models import MBR_model
 from tqdm import tqdm
 from data.augment import *
 
 from metrics.eval_reid import eval_func
+from tensorboard_log import Logger
 
 
 def get_lr(optimizer):
@@ -32,7 +34,20 @@ def get_model(data, device):
     return model.to(device)
 
 
-def train_epoch(model, device, dataloader, loss_fn, triplet_loss, optimizer, data, alpha_ce, beta_triplet, logger, epoch, scheduler=None, scaler=False):
+def train_epoch(model: nn.Module,
+                device: str | torch.device,
+                dataloader: torch.utils.data.DataLoader,
+                loss_fn,
+                triplet_loss,
+                optimizer: torch.optim.Optimizer,
+                data: dict[str],
+                alpha_ce: float,
+                beta_triplet: float,
+                logger: Logger,
+                epoch: int,
+                scheduler: torch.optim.lr_scheduler._LRScheduler | None = None,
+                scaler: torch.amp.GradScaler | bool = False
+                ):
     # Set train mode for both the encoder and the decoder
     model.train()
     losses = []
@@ -42,18 +57,25 @@ def train_epoch(model, device, dataloader, loss_fn, triplet_loss, optimizer, dat
     gamma_ce = data['gamma_ce']
     gamma_t = data['gamma_t']
     model_arch = data['model_arch']
-    use_mixup = data.get('mixup', False)
+    use_mixup = data['mixup']
     tqdm.write(f'Use MixUp: {use_mixup}')
 
-    loss_ce_log =      tqdm(total=0, position=1, bar_format='{desc}', leave=True)
-    loss_triplet_log = tqdm(total=0, position=2, bar_format='{desc}', leave=True)
-    loss_log =         tqdm(total=0, position=3, bar_format='{desc}', leave=True)
+    loss_ce_log =      tqdm(total=0, position=1, bar_format='{desc}', leave=False)
+    loss_triplet_log = tqdm(total=0, position=2, bar_format='{desc}', leave=False)
+    loss_log =         tqdm(total=0, position=3, bar_format='{desc}', leave=False)
 
     n_images = 0
     acc_v = 0
     stepcount = 0
 
-    for batch_id, (batch_images, batch_labels, batch_cams, batch_views, batch_indices, batch_workers) in enumerate(tqdm(dataloader, position=4, desc=f'Epoch {epoch + 1}', bar_format='{l_bar}{bar:20}{r_bar}', unit='batch', leave=True)): 
+    for batch_id, (batch_images, batch_labels, batch_cams, batch_views, batch_indices, batch_workers) in enumerate(
+        tqdm(dataloader,
+             position=4,
+             desc=f'Epoch {epoch + 1}',
+             bar_format='{l_bar}{bar:20}{r_bar}',
+             unit='batch',
+             leave=True)
+        ): 
         # Move tensor to the proper device
         batch_images = batch_images.to(device=device, non_blocking=True)
         batch_labels = batch_labels.to(device=device, non_blocking=True)
@@ -125,7 +147,7 @@ def train_epoch(model, device, dataloader, loss_fn, triplet_loss, optimizer, dat
                     loss_triplet += current_beta * triplet_loss(item, batch_labels)
 
             if data['mean_losses']:
-                loss = loss_ce/len(preds) + loss_triplet/len(embs)
+                loss = loss_ce / len(preds) + loss_triplet / len(embs)
             else:
                 loss = loss_ce + loss_triplet
 
@@ -156,20 +178,31 @@ def train_epoch(model, device, dataloader, loss_fn, triplet_loss, optimizer, dat
     loss_mean_triplet = sum(losses_triplet) / len(losses_triplet)
     loss_mean = sum(losses) / len(losses)
 
-    logger.write_scalars({"Loss/train_total": loss_mean, 
-                          "Loss/train_crossentropy": loss_mean_ce,
-                          "Loss/train_triplet": loss_mean_triplet,
-                          "Loss/AccuracyTrain": (acc_v / n_images).cpu().item()},
-                          epoch * len(dataloader) + stepcount,
-                          write_epoch=True
-                          )
+    train_accuracy = float((acc_v / n_images).cpu().item())
 
-    print('\n\n\n\n', end='')
-    print(f'Train Accuracy: {float((acc_v / n_images).cpu().item())}\n')
+    logger.write_scalars({"Train/total_loss": loss_mean, 
+                          "Train/crossentropy_loss": loss_mean_ce,
+                          "Train/triplet_loss": loss_mean_triplet,
+                          "Train/accuracy": train_accuracy},
+                         epoch * len(dataloader) + stepcount,
+                         write_epoch=True
+                         )
+
+    tqdm.write('\n\n\n\n', end='')
+    tqdm.write(f'Train Accuracy: {train_accuracy}\n')
     return loss_mean, loss_mean_ce, loss_mean_triplet, alpha_ce, beta_triplet
 
 
-def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, writer, epoch, remove_junk=True, scaler=False):
+def test_epoch(model: nn.Module,
+               device: str | torch.device,
+               dataloader_q: torch.utils.data.DataLoader,
+               dataloader_g: torch.utils.data.DataLoader,
+               logger: Logger,
+               epoch: int,
+               remove_junk: bool = True,
+               scaler: torch.amp.GradScaler | bool = False
+               ):
+
     model.eval()
 
     qf = []
@@ -182,7 +215,11 @@ def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, writer, ep
     g_images =  []
 
     with torch.no_grad():
-        for image, q_id, cam_id, view_id in tqdm(dataloader_q, desc='Embedding query', bar_format='{l_bar}{bar:20}{r_bar}', leave=True, unit='batch'):
+        for image, q_id, cam_id, view_id in tqdm(dataloader_q,
+                                                 desc='Embedding query',
+                                                 bar_format='{l_bar}{bar:20}{r_bar}',
+                                                 unit='batch',
+                                                 leave=False):
             image = image.to(device=device, non_blocking=True)
             if scaler:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
@@ -203,11 +240,15 @@ def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, writer, ep
 
         # TensorBoard emmbeddings for projector visualization
         if epoch == 119:    
-            writer.write_embeddings(torch.cat(qf).cpu(), torch.cat(q_vids).cpu(), torch.cat(q_images)/2 + 0.5, 120, tag='Query embeddings')
+            logger.write_embeddings(torch.cat(qf).cpu(), torch.cat(q_vids).cpu(), torch.cat(q_images)/2 + 0.5, 120, tag='Query embeddings')
 
         del q_images
 
-        for image, q_id, cam_id, view_id in tqdm(dataloader_g, desc='Embedding gallery', bar_format='{l_bar}{bar:20}{r_bar}', leave=True, unit='batch'):
+        for image, q_id, cam_id, view_id in tqdm(dataloader_g,
+                                                 desc='Embedding gallery',
+                                                 bar_format='{l_bar}{bar:20}{r_bar}',
+                                                 unit='batch',
+                                                 leave=False):
             image = image.to(device=device, non_blocking=True)
             if scaler:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
@@ -226,7 +267,7 @@ def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, writer, ep
     qf = torch.cat(qf, dim=0)
     gf = torch.cat(gf, dim=0)
     m, n = qf.shape[0], gf.shape[0]   
-    distmat =  torch.pow(qf, 2).sum(dim=1, keepdim=True).expand(m, n) + \
+    distmat = torch.pow(qf, 2).sum(dim=1, keepdim=True).expand(m, n) + \
             torch.pow(gf, 2).sum(dim=1, keepdim=True).expand(n, m).t()
     distmat.addmm_(qf, gf.t(),beta=1, alpha=-2)
     distmat = torch.sqrt(distmat).cpu().numpy()
@@ -240,6 +281,9 @@ def test_epoch(model, device, dataloader_q, dataloader_g, model_arch, writer, ep
     
     cmc, mAP = eval_func(distmat, q_vids, g_vids, q_camids, g_camids, remove_junk=remove_junk)
 
-    writer.write_scalars({"Accuraccy/CMC1": cmc[0], "Accuraccy/mAP": mAP}, epoch)
+    logger.write_scalars({"Test/mAP": mAP,
+                          "Test/CMC1": cmc[0],
+                          "Test/CMC5": cmc[4]},
+                         epoch)
 
     return cmc, mAP

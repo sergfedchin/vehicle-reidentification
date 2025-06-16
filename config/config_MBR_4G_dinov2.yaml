@@ -24,8 +24,8 @@ preload_train_device: cpu  # cuda or cpu
 preload_train_rate: 1
 preload_test_device: cpu  # cuda or cpu
 preload_test_rate: 0
-preload_num_workers: 1
-preload_batch_size: 48
+preload_num_workers: 2
+preload_batch_size: 128
 
 num_epochs: 100
 # sampler: random_identity # fixed_order or random_identity

@@ -15,6 +15,7 @@ import os.path as osp
 import yaml
 from utils import re_ranking
 import time
+from models.models import MBR_model
 
 
 def normalize_batch(batch, maximo=None, minimo = None):
@@ -34,11 +35,12 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark= False
 
 
-def test_epoch(model,
-               device, dataloader_q,
-               dataloader_g,
+def test_epoch(model: MBR_model,
+               device: str | torch.device,
+               dataloader_q: torch.utils.data.DataLoader,
+               dataloader_g: torch.utils.data.DataLoader,
                remove_junk: bool = True,
-               scaler = None,
+               scaler: torch.amp.GradScaler | bool = False,
                re_rank: bool = False,
                use_montecarlo: bool = False,
                montecarlo_iters: int = 30):

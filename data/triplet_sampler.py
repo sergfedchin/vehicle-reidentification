@@ -158,9 +158,6 @@ class LoaderDataset(Dataset):
         if self.preload_mask[idx]:
             # chosen to load
             image = read_image_and_transform(self.paths[idx], self.transform, self.use_fp16)
-            if idx == 10679:
-                print(f'LOADING IMAGE 10679: read_image_and_transform({self.paths[idx]}, {self.transform}, {self.use_fp16})')
-                print(f'LOADED:', image)
         else:
             image = self.empty_image
         return idx, image
