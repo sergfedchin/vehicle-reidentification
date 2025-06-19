@@ -9,15 +9,13 @@ from torch import Tensor
 import copy
 import warnings
 from transformers import AutoModel
+from utils import count_parameters
 
 
 def pdist(vectors):
     distance_matrix = -2 * vectors.mm(torch.t(vectors)) + vectors.pow(2).sum(dim=1).view(1, -1) + vectors.pow(2).sum(
         dim=1).view(-1, 1)
     return distance_matrix
-
-
-def count_parameters(model): return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 def weights_init_kaiming(m):
@@ -294,8 +292,6 @@ class BaseBranches(nn.Module):
             self.model = torch.nn.Sequential(*(list(model_ft.children())[:-3]))
         else:
             self.model = model_ft
-        
-        # print(summary(self.model.to(device='cuda'), (3, 252, 252)))
 
     def forward(self, x):
         x = self.model(x)

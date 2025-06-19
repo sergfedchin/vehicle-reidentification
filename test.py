@@ -1,38 +1,22 @@
-import argparse
 import torch
-from torchvision import transforms
-from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from tqdm import tqdm
+from torch.utils.data import DataLoader
+from torchvision import transforms
 import numpy as np
-from metrics.eval_reid import *
-from data.triplet_sampler import *
-from typing import OrderedDict
-from processor import get_model
-import torch.multiprocessing
-import os
+
 import os.path as osp
+from tqdm import tqdm
+from typing import OrderedDict
+import argparse
 import yaml
-from utils import re_ranking
 import time
+
+from data.triplet_sampler import *
+from data.transform import ProportionalScalePad
+from metrics.eval_reid import *
+from processor import get_model
+from utils import re_ranking, set_seed, format_time
 from models.models import MBR_model
-
-
-def normalize_batch(batch, maximo=None, minimo = None):
-    if maximo != None:
-        return (batch - minimo.unsqueeze(-1).unsqueeze(-1)) / (maximo.unsqueeze(-1).unsqueeze(-1) - minimo.unsqueeze(-1).unsqueeze(-1))
-    else:
-        return (batch - torch.amin(batch, dim=(1, 2)).unsqueeze(-1).unsqueeze(-1)) / (torch.amax(batch, dim=(1, 2)).unsqueeze(-1).unsqueeze(-1) - torch.amin(batch, dim=(1, 2)).unsqueeze(-1).unsqueeze(-1))
-
-
-def set_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.backends.cudnn.deterministic= True
-    torch.backends.cudnn.benchmark= False
 
 
 def test_epoch(model: MBR_model,
@@ -45,7 +29,6 @@ def test_epoch(model: MBR_model,
                use_montecarlo: bool = False,
                montecarlo_iters: int = 30):
     model.eval()
-    # re_escala = torchvision.transforms.Resize((256,256), antialias=True)
     qf = []
     gf = []
     q_camids = []
@@ -125,14 +108,10 @@ def test_epoch(model: MBR_model,
 
 
 if __name__ == "__main__":
-    ### Just to ensure VehicleID 10-fold validation randomness is not random to compare different models training
     set_seed(0)
-    parser = argparse.ArgumentParser(description='Reid train')
+    parser = argparse.ArgumentParser(description='Reid test')
 
-    parser.add_argument('--batch_size', default=None, type=int, help='an integer for the accumulator')
-    parser.add_argument('--dataset', default=None, help='Choose one of[Veri776, VERIWILD]')
-    parser.add_argument('--model_arch', default=None, help='Model Architecture')
-    parser.add_argument('--path_weights', default=None, help="Path to *.pth/*.pt loading weights file")
+    parser.add_argument('--path_weights', default=None, help="Path to *.pth/*.pt  weights file")
     parser.add_argument('--re_rank', action="store_true", help="Re-Rank")
     parser.add_argument('--monte_carlo', action="store_true", help="Use Monte-Carlo for inference")
     args = parser.parse_args()
@@ -143,13 +122,9 @@ if __name__ == "__main__":
     with open(osp.join(log_folder_path, "config.yaml"), "r") as stream:
         data = yaml.safe_load(stream)
 
-    data['BATCH_SIZE'] = args.batch_size or data['BATCH_SIZE']
-    data['dataset'] = args.dataset or data['dataset']
-    data['model_arch'] = args.model_arch or data['model_arch']
-
-
     test_transform = transforms.Compose([
-                    transforms.Resize((data['y_length'],data['x_length']), antialias=True),
+                    transforms.Resize((data['y_length'], data['x_length']), antialias=True),
+                    # ProportionalScalePad(target_width=data['x_length'], target_height=data['y_length']),
                     transforms.Normalize(data['n_mean'], data['n_std']),
     ])                  
 
@@ -199,8 +174,7 @@ if __name__ == "__main__":
                                   shuffle=False,
                                   num_workers=data['num_workers_test'],
                                   persistent_workers=True)
-        loading_time = time.time() - start_time
-        print(f'\nLoading datasets took {int(loading_time // 60)}m {int(loading_time % 60)}s\n')
+        print(f'\nLoading datasets took {format_time(time.time() - start_time)}\n')
 
     print('Loading model...')
     start_time = time.time()

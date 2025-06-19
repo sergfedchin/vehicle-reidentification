@@ -8,3 +8,5 @@ log_batches_no_preload.txt
 *.pyc
 log*.txt
 *.pt
+*.png
+*.jpg

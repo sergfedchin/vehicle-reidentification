@@ -48,6 +48,13 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
+def normalize_batch(batch, maximo=None, minimo = None):
+    if maximo != None:
+        return (batch - minimo.unsqueeze(-1).unsqueeze(-1)) / (maximo.unsqueeze(-1).unsqueeze(-1) - minimo.unsqueeze(-1).unsqueeze(-1))
+    else:
+        return (batch - torch.amin(batch, dim=(1, 2)).unsqueeze(-1).unsqueeze(-1)) / (torch.amax(batch, dim=(1, 2)).unsqueeze(-1).unsqueeze(-1) - torch.amin(batch, dim=(1, 2)).unsqueeze(-1).unsqueeze(-1))
+
+
 def get_train_data() -> dict[str, Any]:
     parser = argparse.ArgumentParser(description='ReID model trainer')
     parser.add_argument('--config',         default=None, help='Config Path')

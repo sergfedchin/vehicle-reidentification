@@ -1,6 +1,5 @@
 from torch.utils.tensorboard import SummaryWriter
 from collections import defaultdict
-import numpy as np
 import pandas as pd
 import os
 import torch
@@ -49,12 +48,13 @@ class Logger(object):
 
     def save_model(self, model):
         if len(self.logscalars['Test/mAP']) > 1:
-            if self.logscalars['Test/mAP'][-1] >= np.max(self.logscalars['Test/mAP'][:-1]):
+            if self.logscalars['Test/mAP'][-1] >= max(self.logscalars['Test/mAP'][:-1]):
                 torch.save(model.state_dict(), self.savepath  + '/' + 'best_mAP' +'.pt')
-            if self.logscalars['Test/CMC1'][-1] >= np.max(self.logscalars['Test/CMC1'][:-1]):
-                torch.save(model.state_dict(), self.savepath  + '/' + 'best_CMC' +'.pt')
+            if self.logscalars['Test/CMC1'][-1] >= max(self.logscalars['Test/CMC1'][:-1]):
+                torch.save(model.state_dict(), self.savepath  + '/' + 'best_CMC1' +'.pt')
+            if self.logscalars['Test/CMC5'][-1] >= max(self.logscalars['Test/CMC5'][:-1]):
+                torch.save(model.state_dict(), self.savepath  + '/' + 'best_CMC5' +'.pt')
         torch.save(model.state_dict(), self.savepath  + '/' + 'last' +'.pt')
 
     def write_embeddings(self, features, labels, images, epoch, tag='default'):
-        #if self.logscalars['Accuraccy/mAP'][-1] > np.max(self.logscalars['Accuraccy/mAP']):
         self.writer.add_embedding(features, metadata=labels, label_img=images, global_step=epoch, tag=tag)

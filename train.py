@@ -12,11 +12,13 @@ import warnings
 from tqdm import tqdm
 
 from data.triplet_sampler import *
+from data.transform import ProportionalScalePad
 from loss.losses import triplet_loss_fastreid
 from lr_scheduler.sche_optim import make_optimizer, make_warmup_scheduler
 from tensorboard_log import Logger
 from processor import get_model, train_epoch, test_epoch 
 from utils import count_parameters, set_modules_params_property, format_time, clear_cache, set_seed, get_train_data
+
 
 
 warnings.filterwarnings(category=UserWarning, action="ignore")
@@ -38,12 +40,14 @@ if __name__ == "__main__":
     # Transformation augmentation
     test_transform = transforms.Compose([
                       transforms.Resize((data['y_length'],data['x_length']), antialias=True),
+                    #   ProportionalScalePad(target_width=data['x_length'], target_height=data['y_length']),
                       transforms.Normalize(data['n_mean'], data['n_std'])
     ])
                   
     train_base_transform = transforms.Compose(
         [
             transforms.Resize((data['y_length'],data['x_length']), antialias=True),
+            # ProportionalScalePad(target_width=data['x_length'], target_height=data['y_length']),
             transforms.Pad(10)
         ]
     )
@@ -176,7 +180,11 @@ if __name__ == "__main__":
         tqdm.write("\nFrozen backbone before branches!\n")
   
     # Training Loop
-    for epoch in tqdm(range(data['num_epochs']), desc='Training', unit='epoch', bar_format='{l_bar}{bar:80}{r_bar}'):
+    for epoch in tqdm(range(data['num_epochs']),
+                      desc='Training',
+                      unit='epoch',
+                      bar_format='{l_bar}{bar:80}{r_bar}',
+                      position=0):
         # Unfreeze backbone
         if epoch == data['warmup_iters'] - 1: 
             set_modules_params_property((model.modelup2L3, model.modelL4), 'requires_grad', True)
@@ -185,6 +193,7 @@ if __name__ == "__main__":
             scheduler = make_warmup_scheduler(data['sched_name'],
                                               optimizer,
                                               data['num_epochs'],
+                                              data,
                                               data['milestones'],
                                               data['gamma'],
                                               data['warmup_factor'],
@@ -206,8 +215,7 @@ if __name__ == "__main__":
 
         start_time = time.time()
         train_loss, ce_loss, triplet_loss, alpha_ce, beta_tri = train_epoch(model, device, data_train, ce_loss_fn, metric_loss_fn, optimizer, data, alpha_ce, beta_tri, logger, epoch, scheduler, scaler)
-        epoch_time = time.time() - start_time
-        tqdm.write(f'\nTotal train epoch {epoch + 1} time: {format_time(epoch_time)}')
+        tqdm.write(f'Total train epoch {epoch + 1} time: {format_time(time.time() - start_time)}')
 
         clear_cache()
 
@@ -216,8 +224,7 @@ if __name__ == "__main__":
             tqdm.write('Start evaluation...')
             start_time = time.time()
             cmc, mAP = test_epoch(model, device, data_query, data_gallery, logger, epoch, remove_junk=True, scaler=scaler)
-            evaluation_time = time.time() - start_time
-            tqdm.write(f'\nTotal evaluation time: {format_time(evaluation_time)}')
+            tqdm.write(f'\nTotal evaluation time: {format_time(time.time() - start_time)}')
             tqdm.write(f'\nEpoch {epoch + 1}/{data["num_epochs"]}: Train Loss {train_loss:.4f} | CrossEntropy Loss {ce_loss:.4f} | Triplet Loss {triplet_loss:.4f} | Test mAP {mAP:.4f} | CMC1 {cmc[0]:.4f} | CMC5 {cmc[4]:.4f}\n')
             logger.save_model(model)
 

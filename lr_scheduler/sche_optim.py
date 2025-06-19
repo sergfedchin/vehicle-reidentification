@@ -3,10 +3,12 @@
 @author:  liaoxingyu
 @contact: sherlockliao01@gmail.com
 """
-from bisect import bisect_right
+from bisect import bisect_right, bisect_left
 import torch
 
 import math
+
+from tqdm import tqdm
 
 # FIXME ideally this would be achieved with a CombinedLRScheduler,
 # separating MultiStepLR with WarmupLR
@@ -265,9 +267,67 @@ class CosineAnnealingWarmupRestarts(torch.optim.lr_scheduler._LRScheduler):
             param_group['lr'] = lr
 
 
-def make_warmup_scheduler(scheduler_name, optimizer, max_epochs, milestones=[40,70,100], gamma=0.1, warmup_factor=1.0 / 3, warmup_iters=3000,
-                          warmup_method="linear",
-                          last_epoch=-1, min_lr = 1e-7, delay=30):
+class WarmupMultiStepSawtooth(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(
+        self,
+        optimizer,
+        milestones,          # [40, 70, 100]
+        gamma=0.1,           # 0.1
+        warmup_factor=0.0,   # 0.0
+        warmup_iters=10,     # 10
+        warmup_method="linear",
+        sawtooth_period=10,  # Oscillation frequency (iterations)
+        peak_multiplier=2.0, # How much higher than base_lr the peak should be
+        last_epoch=-1
+    ):
+        # Validation checks
+        if not list(milestones) == sorted(milestones):
+            raise ValueError("Milestones must be increasing integers")
+        if warmup_method not in ("constant", "linear"):
+            raise ValueError("Invalid warmup method")
+        if peak_multiplier <= 1.0:
+            raise ValueError("peak_multiplier must be > 1.0 to create actual peaks")
+        
+        # Store parameters
+        self.milestones = milestones
+        self.gamma = gamma
+        self.warmup_factor = warmup_factor
+        self.warmup_iters = warmup_iters
+        self.warmup_method = warmup_method
+        self.sawtooth_period = sawtooth_period
+        self.peak_multiplier = peak_multiplier
+        self.last_epoch = last_epoch
+        super().__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        # Calculate decay multiplier
+        decay_steps = bisect_right(self.milestones, self.last_epoch)
+        decay_factor = self.gamma ** decay_steps
+        
+        # Warmup phase
+        if self.last_epoch < self.warmup_iters:
+            if self.warmup_method == "constant":
+                warmup_factor = self.warmup_factor
+            else:  # linear
+                alpha = self.last_epoch / self.warmup_iters
+                warmup_factor = self.warmup_factor * (1 - alpha) + alpha
+            return [base_lr * warmup_factor for base_lr in self.base_lrs]
+        
+        # Sawtooth oscillation phase
+        cycle_pos = (self.last_epoch - self.warmup_iters) % self.sawtooth_period
+        
+        if cycle_pos == 0:
+            # PEAK: base_lr * decay_factor * peak_multiplier
+            return [base_lr * decay_factor * self.peak_multiplier for base_lr in self.base_lrs]
+        else:
+            # Linear descent to TROUGH (base_lr * decay_factor)
+            progress = cycle_pos / self.sawtooth_period
+            current_multiplier = self.peak_multiplier - (self.peak_multiplier - 1.0) * progress
+            return [base_lr * decay_factor * current_multiplier for base_lr in self.base_lrs]
+
+
+def make_warmup_scheduler(scheduler_name, optimizer, max_epochs, data, milestones=[40,70,100], gamma=0.1, warmup_factor=1.0 / 3, warmup_iters=3000,
+                          warmup_method="linear", last_epoch=-1, min_lr = 1e-7, delay=30):
 
     if scheduler_name =="Warm_MultiStep":
         scheduler = WarmupMultiStepLR(optimizer, milestones, gamma, warmup_factor, warmup_iters, warmup_method,
@@ -276,5 +336,15 @@ def make_warmup_scheduler(scheduler_name, optimizer, max_epochs, milestones=[40,
         scheduler = WarmupCosineLR(optimizer, max_epochs, warmup_iters, last_epoch=last_epoch, eta_min=min_lr)
     elif scheduler_name == "CosineAnnealingLR":
         scheduler = CosineAnnealingLR(optimizer, max_epochs, warmup_iters, eta_min=min_lr, delay=delay)
+    elif scheduler_name == "WarmupMultiStepSawtooth":
+        scheduler = scheduler = WarmupMultiStepSawtooth(
+            optimizer,
+            milestones=milestones,
+            gamma=gamma,
+            warmup_factor=warmup_factor,
+            warmup_iters=warmup_iters,
+            sawtooth_period=data['sawtooth_period'],
+            peak_multiplier=data['sawtooth_ratio']
+        )
 
     return scheduler

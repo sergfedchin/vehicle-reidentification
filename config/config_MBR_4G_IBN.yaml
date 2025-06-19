@@ -2,7 +2,7 @@ model_arch: MBR_4G
 LAI: False
 n_cams: 20
 n_views: 8
-backbone: ibn # dinov2_vit(s/b/l/g)14 dinov2_vit(s/b/l/g)14_reg
+backbone: ibn
 torch_seed: 0
 epoch_freeze_L1toL3: 10
 freeze_triplet_branches: 0
@@ -29,8 +29,8 @@ preload_batch_size: 128
 
 num_epochs: 130
 
-y_length: 320
-x_length: 320
+x_length: 337  # width
+y_length: 311  # height
 
 # Losses
 mean_losses: False
@@ -63,7 +63,7 @@ p_rerase: 0.5
 dataset: Veri776
 
 n_classes: 576
-NUM_INSTANCES: 8 #8
+NUM_INSTANCES: 8
 images_dir: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/veri_images
 query_list_file: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/VeRi/original_veri_query_list.txt
 gallery_list_file: /home/serg_fedchn/Homework/6_semester/НИР/object-reidentification/dataset/VeRi/original_veri_test_list.txt
@@ -86,6 +86,15 @@ bias_lr_factor: 1
 momentum: 0.9
 
 # scheduler settings
+# sched_name: WarmupMultiStepSawtooth
+# min_lr: 7.75e-5
+# milestones: [40, 70, 100]
+# gamma: 0.1
+# warmup_factor: 0.0
+# warmup_iters:  10  # 10 !!!!!!!!!!!!!!!!! CHANGE TO 10
+# warmup_method: linear
+# sawtooth_period: 6      # Oscillate every 6 iterations
+# sawtooth_ratio: 2
 sched_name: Warm_MultiStep
 min_lr: 7.75e-5
 milestones: [40, 70, 100]

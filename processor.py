@@ -60,9 +60,9 @@ def train_epoch(model: nn.Module,
     use_mixup = data['mixup']
     tqdm.write(f'Use MixUp: {use_mixup}')
 
-    loss_ce_log =      tqdm(total=0, position=1, bar_format='{desc}', leave=False)
-    loss_triplet_log = tqdm(total=0, position=2, bar_format='{desc}', leave=False)
-    loss_log =         tqdm(total=0, position=3, bar_format='{desc}', leave=False)
+    loss_ce_log =      tqdm(total=0, position=2, bar_format='{desc}', leave=False)
+    loss_triplet_log = tqdm(total=0, position=3, bar_format='{desc}', leave=False)
+    loss_log =         tqdm(total=0, position=4, bar_format='{desc}', leave=False)
 
     n_images = 0
     acc_v = 0
@@ -70,7 +70,7 @@ def train_epoch(model: nn.Module,
 
     for batch_id, (batch_images, batch_labels, batch_cams, batch_views, batch_indices, batch_workers) in enumerate(
         tqdm(dataloader,
-             position=4,
+             position=1,
              desc=f'Epoch {epoch + 1}',
              bar_format='{l_bar}{bar:20}{r_bar}',
              unit='batch',
@@ -79,8 +79,8 @@ def train_epoch(model: nn.Module,
         # Move tensor to the proper device
         batch_images = batch_images.to(device=device, non_blocking=True)
         batch_labels = batch_labels.to(device=device, non_blocking=True)
-        batch_cams = batch_cams.to(device=device, non_blocking=True)
-        batch_views = batch_views.to(device=device, non_blocking=True)
+        batch_cams   = batch_cams.to(  device=device, non_blocking=True)
+        batch_views  = batch_views.to( device=device, non_blocking=True)
         
         # Apply MixUp if enabled
         if use_mixup:
@@ -157,7 +157,7 @@ def train_epoch(model: nn.Module,
             acc_v += torch.sum(torch.argmax(prediction, dim=1) == temp_labels)
             n_images += prediction.size(0)
         stepcount += 1
-    
+
         if scaler:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -174,6 +174,10 @@ def train_epoch(model: nn.Module,
         losses_triplet.append(loss_triplet.detach().cpu())
         losses.append(loss.detach().cpu())
 
+    loss_ce_log.close()
+    loss_triplet_log.close()
+    loss_log.close()
+
     loss_mean_ce = sum(losses_ce) / len(losses_ce)
     loss_mean_triplet = sum(losses_triplet) / len(losses_triplet)
     loss_mean = sum(losses) / len(losses)
@@ -183,13 +187,13 @@ def train_epoch(model: nn.Module,
     logger.write_scalars({"Train/total_loss": loss_mean, 
                           "Train/crossentropy_loss": loss_mean_ce,
                           "Train/triplet_loss": loss_mean_triplet,
-                          "Train/accuracy": train_accuracy},
+                          "Train/accuracy": train_accuracy,
+                          "lr/learning_rate": optimizer.param_groups[0]['lr']},
                          epoch * len(dataloader) + stepcount,
                          write_epoch=True
                          )
 
-    tqdm.write('\n\n\n\n', end='')
-    tqdm.write(f'Train Accuracy: {train_accuracy}\n')
+    tqdm.write(f'\nTrain Accuracy: {train_accuracy}\n')
     return loss_mean, loss_mean_ce, loss_mean_triplet, alpha_ce, beta_triplet
 
 
