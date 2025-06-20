@@ -1,6 +1,0 @@
-Original MBR_4G - 0.8247
-Tuned params (my) MBR_4G - 0.8354
-MBR_4G 128x128 - 0.6746
-MBR_4G 64x64 - 0.4467
-MBR_4G DinoV2 small - 0.7870
-MBR_4G DinoV2 base - 0.7867

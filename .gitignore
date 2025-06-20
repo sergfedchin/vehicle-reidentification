@@ -9,4 +9,7 @@ log_batches_no_preload.txt
 log*.txt
 *.pt
 *.png
+!images/*.png
 *.jpg
+delete_later.py
+presentation.ipynb
