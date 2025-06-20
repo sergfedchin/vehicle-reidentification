@@ -5,7 +5,7 @@
 
 ![Method Architecture](images/method_scheme.png)
 
-A deep learning framework for vehicle re-identification (V-ReID) that extracts discriminative embeddings from vehicle images to compute similarity measures between image pairs. This implementation modifies the multi-branch architecture from "Strength in Diversity" paper with enhanced caching mechanisms and training optimizations.
+A deep learning framework for vehicle re-identification (V-ReID) that extracts discriminative embeddings from vehicle images to compute similarity measures between image pairs. This implementation modifies the multi-branch architecture from ["Strength in Diversity"](https://github.com/videturfortuna/vehicle_reid_itsc2023/tree/main) with enhanced caching mechanisms and training optimizations.
 
 ## ✨ Key Features
 
